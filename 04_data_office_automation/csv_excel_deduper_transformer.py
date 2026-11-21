@@ -73,13 +73,75 @@ def process_tabular_file(
         if HAS_PANDAS:
             df = pd.read_csv(inp, sep=sep, dtype=str, keep_default_na=False)
         else:
-            # Standard library fallback
+            # Standard library zero-dependency fallback for CSV/TSV
             with open(inp, 'r', encoding='utf-8', errors='ignore') as f:
                 reader = csv.DictReader(f, delimiter=sep)
                 rows = list(reader)
-                cols = reader.fieldnames or []
-            # We'll work with pandas if available, else dicts
-            return {"error": "pandas recommended for advanced processing"}
+                fieldnames = list(reader.fieldnames or [])
+
+            initial_count = len(rows)
+            for row in rows:
+                for k in fieldnames:
+                    row[k] = (row.get(k) or '').strip()
+
+            if clean_emails:
+                for c in clean_emails:
+                    if c in fieldnames:
+                        for row in rows:
+                            row[c] = normalize_email(row[c])
+
+            if clean_phones:
+                for c in clean_phones:
+                    if c in fieldnames:
+                        for row in rows:
+                            row[c] = normalize_phone(row[c])
+
+            dropped_empty = 0
+            if drop_empty_cols:
+                filtered_rows = []
+                for row in rows:
+                    if all((row.get(c) or '').strip() not in ('', 'nan') for c in drop_empty_cols if c in fieldnames):
+                        filtered_rows.append(row)
+                    else:
+                        dropped_empty += 1
+                rows = filtered_rows
+
+            seen = set()
+            deduped = []
+            for row in rows:
+                if dedup_cols:
+                    key = tuple(row.get(c, '') for c in dedup_cols if c in fieldnames)
+                else:
+                    key = tuple(row.get(c, '') for c in fieldnames)
+                if key not in seen:
+                    seen.add(key)
+                    deduped.append(row)
+            duplicates_removed = len(rows) - len(deduped)
+            rows = deduped
+            final_count = len(rows)
+
+            if output_path:
+                out = Path(output_path)
+                out.parent.mkdir(parents=True, exist_ok=True)
+                fmt = export_format.lower()
+                if fmt == "json" or out.suffix.lower() == ".json":
+                    with open(out, 'w', encoding='utf-8') as f:
+                        json.dump(rows, f, indent=2)
+                else:
+                    with open(out, 'w', newline='', encoding='utf-8') as f:
+                        writer = csv.DictWriter(f, fieldnames=fieldnames)
+                        writer.writeheader()
+                        writer.writerows(rows)
+
+            return {
+                "input_file": str(inp),
+                "initial_rows": initial_count,
+                "duplicates_removed": duplicates_removed,
+                "empty_rows_dropped": dropped_empty,
+                "final_rows": final_count,
+                "columns": fieldnames,
+                "output_file": str(output_path) if output_path else None
+            }
 
     initial_count = len(df)
     
@@ -174,6 +236,10 @@ def main():
         )
     except Exception as e:
         print(f"[!] Processing error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+    if "error" in summary:
+        print(f"[!] Processing error: {summary['error']}", file=sys.stderr)
         sys.exit(1)
 
     if args.json:

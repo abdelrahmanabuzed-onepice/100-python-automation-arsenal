@@ -70,11 +70,12 @@ def generate_manifest(target_dir: str, algorithm: str = "sha256", threads: int =
     }
 
 
-def verify_manifest(target_dir: str, manifest_data: Dict[str, Any], threads: int = 8) -> Dict[str, Any]:
+def verify_manifest(target_dir: str, manifest_data: Dict[str, Any], threads: int = 8, ignore_files: Optional[List[str]] = None) -> Dict[str, Any]:
     """Compare target directory against an existing hash manifest."""
     root = Path(target_dir).resolve()
     algorithm = manifest_data.get("algorithm", "SHA256").lower()
     expected_files = manifest_data.get("files", {})
+    ignored = set(f.replace("\\", "/") for f in (ignore_files or []))
 
     current_manifest = generate_manifest(str(root), algorithm=algorithm, threads=threads)
     current_files = current_manifest["files"]
@@ -86,6 +87,8 @@ def verify_manifest(target_dir: str, manifest_data: Dict[str, Any], threads: int
 
     # Check expected files against current
     for rel_path, exp_info in expected_files.items():
+        if rel_path in ignored:
+            continue
         if rel_path not in current_files:
             missing.append(rel_path)
         else:
@@ -101,7 +104,7 @@ def verify_manifest(target_dir: str, manifest_data: Dict[str, Any], threads: int
 
     # Check for newly added untracked files
     for rel_path in current_files.keys():
-        if rel_path not in expected_files:
+        if rel_path not in expected_files and rel_path not in ignored:
             new_files.append(rel_path)
 
     is_clean = (len(modified) == 0 and len(missing) == 0 and len(new_files) == 0)
@@ -158,7 +161,15 @@ def main():
             sys.exit(1)
 
         print(f"[*] Verifying directory '{args.path}' against manifest...")
-        report = verify_manifest(args.path, data)
+        manifest_rel = None
+        try:
+            m_path = Path(args.manifest).resolve()
+            r_path = Path(args.path).resolve()
+            if m_path.is_relative_to(r_path):
+                manifest_rel = str(m_path.relative_to(r_path)).replace("\\", "/")
+        except Exception:
+            pass
+        report = verify_manifest(args.path, data, ignore_files=[manifest_rel] if manifest_rel else None)
 
         if args.json:
             print(json.dumps(report, indent=2))

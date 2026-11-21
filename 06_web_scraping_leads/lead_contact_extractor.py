@@ -185,6 +185,10 @@ def main():
 
     for item in records:
         print(f"\n[URL]   : {item['url']}")
+        if item.get("error"):
+            print(f"[Status]: [ERROR] {item['error']}")
+        elif item.get("status") and item.get("status") != 200:
+            print(f"[Status]: HTTP {item['status']}")
         print(f"[Title] : {item.get('title', 'N/A')}")
         emails_str = ", ".join(item.get("emails", [])) or "None"
         phones_str = ", ".join(item.get("phones", [])) or "None"

@@ -62,10 +62,10 @@ def query_txt_record(name: str) -> List[str]:
 def check_spf_dmarc(domain: str) -> Dict[str, Any]:
     """Check SPF and DMARC records for a domain."""
     records = query_txt_record(domain)
-    spf = [r for r in records if r.startswith("v=spf1")]
+    spf = [r for r in records if r.lower().startswith("v=spf1")]
 
     dmarc_records = query_txt_record(f"_dmarc.{domain}")
-    dmarc = [r for r in dmarc_records if r.startswith("v=DMARC1")]
+    dmarc = [r for r in dmarc_records if r.lower().startswith("v=dmarc1")]
 
     return {
         "spf_found": len(spf) > 0,
@@ -100,12 +100,15 @@ def probe_smtp_recipient(mx_host: str, recipient: str, sender: str = "verify@tes
         info["starttls_supported"] = smtp.has_extn("STARTTLS")
 
         # MAIL FROM
-        c_mail, _ = smtp.mail(sender)
+        c_mail, msg_mail = smtp.mail(sender)
         if c_mail == 250:
             c_rcpt, msg_rcpt = smtp.rcpt(recipient)
             info["smtp_code"] = c_rcpt
             info["response_message"] = msg_rcpt.decode('utf-8', errors='ignore') if isinstance(msg_rcpt, bytes) else str(msg_rcpt)
             info["rcpt_accepted"] = (c_rcpt == 250)
+        else:
+            info["smtp_code"] = c_mail
+            info["response_message"] = msg_mail.decode('utf-8', errors='ignore') if isinstance(msg_mail, bytes) else str(msg_mail)
         
         try:
             smtp.quit()

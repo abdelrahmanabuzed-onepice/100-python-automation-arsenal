@@ -100,14 +100,20 @@ def strip_image_exif(src_path: Path, dest_path: Path) -> bool:
 
     try:
         with Image.open(src_path) as img:
-            # Create fresh copy without metadata
-            data = list(img.getdata())
-            image_without_exif = Image.new(img.mode, img.size)
-            image_without_exif.putdata(data)
+            dest_ext = dest_path.suffix.lower()
+            # If saving as JPEG, convert RGBA or Palette mode to RGB
+            if dest_ext in ('.jpg', '.jpeg') and img.mode in ('RGBA', 'P', 'LA'):
+                clean_img = Image.new("RGB", img.size, (255, 255, 255))
+                if img.mode == 'RGBA':
+                    clean_img.paste(img, mask=img.split()[3])
+                else:
+                    clean_img.paste(img.convert('RGB'))
+            else:
+                clean_img = Image.new(img.mode, img.size)
+                clean_img.paste(img)
 
             dest_path.parent.mkdir(parents=True, exist_ok=True)
-            # Save without exif
-            image_without_exif.save(dest_path)
+            clean_img.save(dest_path)
         return True
     except Exception:
         return False

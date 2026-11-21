@@ -156,7 +156,8 @@ def main():
     print("=" * 70)
     print(f"  Total Commits Analyzed : {report['analyzed_commits']:,}")
     print(f"  Unique Contributors    : {report['unique_authors']}")
-    print(f"  Activity Span          : {report['first_commit'][:10]} -> {report['latest_commit'][:10]}")
+    span = f"{report['first_commit'][:10]} -> {report['latest_commit'][:10]}" if report.get('first_commit') and report.get('latest_commit') else "Initial release"
+    print(f"  Activity Span          : {span}")
 
     print("\n--- Top Contributors ---")
     print(f"{'Author':<28} | {'Commits':<8} | {'Impact'}")
@@ -169,7 +170,7 @@ def main():
         print(f"  [{h['modifications']:>3} edits]  {h['file']}")
 
     print("\n--- Day-of-Week Commit Distribution ---")
-    max_day = max(report["by_weekday"].values()) if report["by_weekday"].values() else 1
+    max_day = max(report["by_weekday"].values(), default=1) or 1
     for day, count in report["by_weekday"].items():
         bar = render_ascii_bar(count, max_day, width=25)
         print(f"  {day:<4} | {bar} {count:>3}")

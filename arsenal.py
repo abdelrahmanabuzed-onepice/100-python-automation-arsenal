@@ -246,8 +246,8 @@ def execute_tool(tool_info: Dict[str, Any], args: List[str]):
         return
 
     cmd = [sys.executable, str(target_path)] + args
-    print(f"\n{GREEN}[*] Launching: {tool_info['name']}{RESET}")
-    print(f"{DIM}[Command] {' '.join(cmd)}{RESET}\n")
+    print(f"\n{GREEN}[*] Launching: {tool_info['name']}{RESET}", flush=True)
+    print(f"{DIM}[Command] {' '.join(cmd)}{RESET}\n", flush=True)
     try:
         subprocess.run(cmd)
     except KeyboardInterrupt:

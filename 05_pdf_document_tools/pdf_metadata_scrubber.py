@@ -68,8 +68,10 @@ def scrub_pdf_metadata(input_path: str, output_path: str) -> bool:
     for page in reader.pages:
         writer.add_page(page)
 
-    # Empty metadata dictionary
-    writer.add_metadata({})
+    # Completely wipe metadata and XMP blocks
+    writer._info = None
+    if hasattr(writer, "_xmp_metadata"):
+        writer._xmp_metadata = None
 
     out = Path(output_path)
     out.parent.mkdir(parents=True, exist_ok=True)

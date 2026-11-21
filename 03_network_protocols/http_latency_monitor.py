@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 from typing import List, Dict, Optional, Any
 
 
-def inspect_ssl_certificate(hostname: str, port: int = 443, timeout: float = 4.0) -> Dict[str, Any]:
-    """Retrieve and parse remote SSL certificate details."""
+def inspect_ssl_certificate(hostname: str, port: int = 443, timeout: float = 4.0, existing_ssock: Optional[Any] = None) -> Dict[str, Any]:
+    """Retrieve and parse remote SSL certificate details (reuses existing TLS socket if provided)."""
     context = ssl.create_default_context()
     cert_info = {
         "hostname": hostname,
@@ -35,35 +35,40 @@ def inspect_ssl_certificate(hostname: str, port: int = 443, timeout: float = 4.0
         "error": None
     }
 
+    def parse_cert(cert: dict, version: str):
+        cert_info["tls_version"] = version
+        exp_str = cert.get('notAfter')
+        if exp_str:
+            exp_date = datetime.strptime(exp_str, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
+            now_utc = datetime.now(timezone.utc)
+            days_left = (exp_date - now_utc).days
+            cert_info["expires_utc"] = exp_date.isoformat()
+            cert_info["days_remaining"] = days_left
+            cert_info["valid"] = days_left > 0
+
+        for item in cert.get('issuer', ()):
+            for k, v in item:
+                if k in ('organizationName', 'commonName'):
+                    cert_info["issuer"] = v
+                    break
+
+        for item in cert.get('subject', ()):
+            for k, v in item:
+                if k == 'commonName':
+                    cert_info["subject"] = v
+                    break
+
     try:
-        with socket.create_connection((hostname, port), timeout=timeout) as sock:
-            with context.wrap_socket(sock, server_hostname=hostname) as ssock:
-                cert = ssock.getpeercert()
-                cert_info["tls_version"] = ssock.version()
-                
-                # Expiry
-                exp_str = cert.get('notAfter')
-                if exp_str:
-                    exp_date = datetime.strptime(exp_str, '%b %d %H:%M:%S %Y %Z').replace(tzinfo=timezone.utc)
-                    now_utc = datetime.now(timezone.utc)
-                    days_left = (exp_date - now_utc).days
-                    cert_info["expires_utc"] = exp_date.isoformat()
-                    cert_info["days_remaining"] = days_left
-                    cert_info["valid"] = days_left > 0
-
-                # Subject and Issuer
-                for item in cert.get('issuer', ()):
-                    for k, v in item:
-                        if k == 'organizationName' or k == 'commonName':
-                            cert_info["issuer"] = v
-                            break
-
-                for item in cert.get('subject', ()):
-                    for k, v in item:
-                        if k == 'commonName':
-                            cert_info["subject"] = v
-                            break
-
+        if existing_ssock is not None:
+            cert = existing_ssock.getpeercert()
+            if cert:
+                parse_cert(cert, existing_ssock.version() or "Unknown")
+        else:
+            with socket.create_connection((hostname, port), timeout=timeout) as sock:
+                with context.wrap_socket(sock, server_hostname=hostname) as ssock:
+                    cert = ssock.getpeercert()
+                    if cert:
+                        parse_cert(cert, ssock.version() or "Unknown")
     except Exception as e:
         cert_info["error"] = str(e)
 
@@ -128,7 +133,7 @@ def profile_http_endpoint(url: str, timeout: float = 6.0) -> Dict[str, Any]:
             client_sock = ctx.wrap_socket(sock, server_hostname=hostname)
             t_tls_done = time.perf_counter()
             metrics["tls_ms"] = round((t_tls_done - t_start_tls) * 1000, 2)
-            metrics["ssl"] = inspect_ssl_certificate(hostname, port, timeout)
+            metrics["ssl"] = inspect_ssl_certificate(hostname, port, timeout, existing_ssock=client_sock)
         except Exception as e:
             metrics["error"] = f"TLS handshake failed: {e}"
             client_sock.close()

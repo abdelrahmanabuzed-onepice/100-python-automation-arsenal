@@ -29,7 +29,10 @@ CATEGORY_MAP = {
     "Executables": [".exe", ".msi", ".dll", ".apk", ".appimage", ".dmg"]
 }
 
-IGNORED_NAMES = {".git", ".svn", ".vscode", ".idea", "node_modules", "arsenal.py"}
+IGNORED_NAMES = {
+    ".git", ".svn", ".vscode", ".idea", "node_modules", "arsenal.py",
+    Path(__file__).name, "requirements.txt", "README.md", ".gitignore", "LICENSE", "setup.py"
+}
 
 
 def get_unique_destination(dest_path: Path) -> Path:

@@ -27,18 +27,31 @@ except ImportError:
 
 
 def parse_page_range(range_str: str, total_pages: int) -> List[int]:
-    """Parse string range like '1-3,5,8-10' into 0-indexed list of page numbers."""
+    """Parse string range like '1-3,5,8-10', '2-end', 'all' into 0-indexed list of page numbers."""
+    if range_str.strip().lower() in ("all", "*"):
+        return list(range(total_pages))
+
     pages = []
     parts = range_str.split(",")
     for p in parts:
-        p = p.strip()
+        p = p.strip().lower()
         if "-" in p:
             start_s, end_s = p.split("-", 1)
-            start_num = int(start_s) if start_s else 1
-            end_num = int(end_s) if end_s else total_pages
+            start_s = start_s.strip()
+            end_s = end_s.strip()
+            start_num = int(start_s) if start_s and start_s.isdigit() else 1
+            if end_s in ("", "end", "max"):
+                end_num = total_pages
+            elif end_s.isdigit():
+                end_num = int(end_s)
+            else:
+                end_num = total_pages
             for i in range(start_num, end_num + 1):
                 if 1 <= i <= total_pages:
                     pages.append(i - 1)
+        elif p in ("end", "last"):
+            if total_pages >= 1:
+                pages.append(total_pages - 1)
         elif p.isdigit():
             val = int(p)
             if 1 <= val <= total_pages:

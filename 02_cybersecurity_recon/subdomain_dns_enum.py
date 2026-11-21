@@ -34,10 +34,10 @@ def get_configured_resolver() -> Any:
     if not HAS_DNSPYTHON:
         return None
     r = dns.resolver.Resolver()
-    # Add public reliable DNS resolvers so local VPN/dormant adapter IPs don't cause timeouts
-    r.nameservers = ['8.8.8.8', '1.1.1.1'] + [ns for ns in r.nameservers if ns not in ('8.8.8.8', '1.1.1.1')]
-    r.timeout = 2.0
-    r.lifetime = 2.5
+    # Use reliable, low-latency public DNS resolvers
+    r.nameservers = ['8.8.8.8', '1.1.1.1', '8.8.4.4']
+    r.timeout = 1.5
+    r.lifetime = 2.0
     return r
 
 
@@ -79,16 +79,18 @@ def resolve_subdomain(subdomain: str, root_domain: str, resolver: Any = None) ->
             ips = [r.to_text() for r in answers]
             if ips:
                 return {"subdomain": subdomain, "fqdn": fqdn, "ips": ips, "status": "ACTIVE"}
+        except (dns.resolver.NXDOMAIN, dns.resolver.NoAnswer):
+            return None
         except Exception:
             pass
-
-    # Socket fallback
-    try:
-        ips = socket.gethostbyname_ex(fqdn)[2]
-        if ips:
-            return {"subdomain": subdomain, "fqdn": fqdn, "ips": ips, "status": "ACTIVE"}
-    except Exception:
-        pass
+    else:
+        # Fallback to standard socket only when dnspython is unavailable
+        try:
+            ips = socket.gethostbyname_ex(fqdn)[2]
+            if ips:
+                return {"subdomain": subdomain, "fqdn": fqdn, "ips": ips, "status": "ACTIVE"}
+        except Exception:
+            pass
 
     return None
 
